@@ -196,7 +196,7 @@ For a deep dive into the reasoning behind using **Parquet over CSV**, **Autoenco
 
 ### 👨‍💻 Author
 
-Built by Anshuman Maurya
+Built by Tauhid Alam
 
 
 ---
