@@ -1,0 +1,32 @@
+Shape: (10014, 21)
+
+Data Types:
+Row ID             int64
+Order ID          object
+Order Date        object
+Ship Date         object
+Ship Mode         object
+Customer ID       object
+Customer Name     object
+Segment           object
+Country           object
+City              object
+State             object
+Postal Code        int64
+Region            object
+Product ID        object
+Category          object
+Sub-Category      object
+Product Name      object
+Sales Price      float64
+Quantity         float64
+Discount         float64
+Profit           float64
+dtype: object
+
+Missing Values:
+Ship Mode    98
+Quantity     18
+dtype: int64
+
+Duplicate Rows: 17

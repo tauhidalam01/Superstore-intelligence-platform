@@ -1,0 +1,181 @@
+# # src/eda.py
+
+# import pandas as pd
+# import numpy as np
+# import logging
+# import os
+
+# # Set up some basic logging
+# logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# def remove_duplicates(data: pd.DataFrame) -> pd.DataFrame:
+#     """First things first, let's get rid of any duplicate rows."""
+#     dupe_count = data.duplicated().sum()
+#     if dupe_count > 0:
+#         logging.info(f"Found {dupe_count} duplicate rows. Dropping them.")
+#         data = data.drop_duplicates().reset_index(drop=True)
+#     else:
+#         logging.info("No duplicate rows found. Good to go!")
+#     return data
+
+# def fix_dates_and_ids(data: pd.DataFrame) -> pd.DataFrame:
+#     """Clean up date columns and make sure the Order IDs are consistent."""
+#     logging.info("Fixing up date columns and checking Order IDs...")
+    
+#     # Convert date columns to actual datetime objects. If a date is funky, it'll become NaT.
+#     data['Order Date'] = pd.to_datetime(data['Order Date'], format='%d/%m/%y', errors='coerce')
+#     data['Ship Date'] = pd.to_datetime(data['Ship Date'], errors='coerce')
+
+#     # If the Order Date couldn't be parsed, the row is not very useful. Let's drop it.
+#     initial_rows = len(data)
+#     data.dropna(subset=['Order Date'], inplace=True)
+#     if len(data) < initial_rows:
+#         logging.warning(f"Dropped {initial_rows - len(data)} rows with bad Order Dates.")
+
+#     # Some Order IDs have the wrong year. Let's fix them using the Order Date year.
+#     id_year = data['Order ID'].str.split('-').str[1]
+#     order_date_year = data['Order Date'].dt.year.astype(str)
+    
+#     mismatched_ids = id_year != order_date_year
+#     if mismatched_ids.any():
+#         logging.info(f"Found {mismatched_ids.sum()} Order IDs with the wrong year. Correcting them now.")
+#         # Reconstruct the ID: 'CA-' + [correct_year] + '-' + [original_serial_number]
+#         data.loc[mismatched_ids, 'Order ID'] = \
+#             'CA-' + data.loc[mismatched_ids, 'Order Date'].dt.year.astype(str) + \
+#             '-' + data.loc[mismatched_ids, 'Order ID'].str.split('-').str[2]
+            
+#     return data
+
+# def clean_shipping_info(data: pd.DataFrame) -> pd.DataFrame:
+#     """Calculate the days to ship and handle any impossible shipping dates."""
+#     logging.info("Calculating 'Days to Ship' and cleaning up shipping data.")
+#     data['Days to Ship'] = (data['Ship Date'] - data['Order Date']).dt.days
+    
+#     # A shipment can't arrive before it's ordered. Let's nullify these weird cases.
+#     # Also flagging anything over 90 days as it's likely an error.
+#     bad_shipping_dates = (data['Days to Ship'] < 0) | (data['Days to Ship'] > 90)
+#     if bad_shipping_dates.any():
+#         logging.warning(f"Found {bad_shipping_dates.sum()} impossible shipping dates. Setting them to NaN.")
+#         data.loc[bad_shipping_dates, ['Ship Date', 'Days to Ship']] = np.nan
+        
+#     return data
+
+# def fill_missing_values(data: pd.DataFrame) -> pd.DataFrame:
+#     """Fill in the blanks for Ship Mode and Quantity where it makes sense."""
+#     logging.info("Imputing missing values for Ship Mode and Quantity...")
+    
+#     # We can infer the Ship Mode if we know the shipping time.
+#     data.loc[(data['Ship Mode'].isna()) & (data['Days to Ship'] == 0), 'Ship Mode'] = 'Same Day'
+#     data.loc[(data['Ship Mode'].isna()) & (data['Days to Ship'] == 7), 'Ship Mode'] = 'Standard Class'
+
+#     # For Quantity, the median is a safe bet since it's not affected by huge outlier orders.
+#     if data['Quantity'].isnull().any():
+#         median_qty = data['Quantity'].median()
+#         logging.info(f"Filling {data['Quantity'].isnull().sum()} missing Quantities with the median value ({median_qty}).")
+#         data['Quantity'].fillna(median_qty, inplace=True)
+#         data['Quantity'] = data['Quantity'].astype(int) # Convert to whole number after filling
+        
+#     return data
+
+# def standardize_text_fields(data: pd.DataFrame) -> pd.DataFrame:
+#     """Standardize messy string columns like State and Postal Code."""
+#     logging.info("Standardizing state names and postal codes.")
+    
+#     # Ensure all postal codes are 5-digit strings, padding with zeros if needed.
+#     data['Postal Code'] = data['Postal Code'].astype(str).str.zfill(5)
+
+#     # Clean up state abbreviations and map them to full names.
+#     state_map = {'CA': 'California', 'NY': 'New York', 'TX': 'Texas', 'NJ': 'New Jersey', 'WA\\': 'Washington'}
+#     data['State'] = data['State'].str.strip().replace(state_map)
+    
+#     return data
+    
+# def create_financial_metrics(data: pd.DataFrame) -> pd.DataFrame:
+#     """Engineer some useful financial features from the existing data."""
+#     logging.info("Building out financial metrics like Total Sales and Profit.")
+    
+#     # A negative sales price doesn't make sense. Let's assume it's a data entry error.
+#     data['Sales Price'] = data['Sales Price'].abs()
+    
+#     # Calculate some new columns
+#     data['Original Price'] = data['Sales Price'] / (1 - data['Discount'])
+#     data['Total Sales'] = data['Sales Price'] * data['Quantity']
+#     data['Total Profit'] = data['Profit'] * data['Quantity']
+#     data['Total Discount'] = (data['Original Price'] - data['Sales Price']) * data['Quantity']
+    
+#     return data
+
+# def remove_outliers(data: pd.DataFrame, columns: list) -> pd.DataFrame:
+#     """Removes extreme outliers from key numeric columns using the IQR method."""
+#     logging.info(f"Scanning for extreme outliers in {columns}...")
+#     initial_rows = len(data)
+    
+#     for col in columns:
+#         Q1 = data[col].quantile(0.25)
+#         Q3 = data[col].quantile(0.75)
+#         IQR = Q3 - Q1
+        
+#         # We'll use a 3*IQR range, which is a bit more generous than the typical 1.5*IQR.
+#         lower_bound = Q1 - 3 * IQR
+#         upper_bound = Q3 + 3 * IQR
+        
+#         # Filter out the rows that are outside this range
+#         clean_data = data[(data[col] >= lower_bound) & (data[col] <= upper_bound)]
+        
+#         outliers_removed = len(data) - len(clean_data)
+#         if outliers_removed > 0:
+#             logging.info(f"Removed {outliers_removed} outliers from '{col}'.")
+#         data = clean_data
+            
+#     logging.info(f"Total rows removed due to outliers: {initial_rows - len(data)}")
+#     return data.reset_index(drop=True)
+
+# def run_cleaning_pipeline(raw_csv_path: str, output_parquet_path: str) -> pd.DataFrame:
+#     """
+#     This is the main function that runs all the data cleaning steps in order.
+#     """
+#     logging.info(f"--- 🚀 Kicking off the data prep pipeline for {raw_csv_path} ---")
+    
+#     df = pd.read_csv(raw_csv_path)
+#     logging.info(f"Successfully loaded raw data. Initial shape: {df.shape}")
+    
+#     # Run the pipeline step-by-step
+#     df = remove_duplicates(df)
+#     df = fix_dates_and_ids(df)
+#     df = clean_shipping_info(df)
+#     df = fill_missing_values(df)
+#     df = standardize_text_fields(df)
+#     df = create_financial_metrics(df)
+    
+#     # Drop customer name to avoid keeping personally identifiable information (PII)
+#     df.drop(columns=['Customer Name'], inplace=True)
+    
+#     # Outlier removal is usually one of the last steps
+#     df = remove_outliers(df, columns=['Sales Price', 'Profit'])
+    
+#     # Save the clean data to a Parquet file. It's faster and takes up less space than CSV.
+#     df.to_parquet(output_parquet_path, index=False)
+#     logging.info(f"Pipeline complete! Final data shape: {df.shape}")
+#     logging.info(f"✅ Cleaned data saved to '{output_parquet_path}'")
+    
+#     return df
+
+# # This block lets us run the script directly from the command line.
+# if __name__ == '__main__':
+#     # Define our file paths
+#     RAW_DATA_PATH = 'data/raw/SuperStore_Dataset.csv'
+#     PROCESSED_DATA_PATH = 'data/processed/cleaned_superstore_data.parquet'
+    
+#     # Make sure the folders exist before we try to save files to them.
+#     os.makedirs('data/processed', exist_ok=True)
+    
+#     # Check if the raw data is where we expect it to be.
+#     if not os.path.exists(RAW_DATA_PATH):
+#         logging.error(f"Houston, we have a problem. Raw data file not found at '{RAW_DATA_PATH}'.")
+#         logging.error("Please place the SuperStore_Dataset.csv there and try again.")
+#     else:
+#         # If the file is there, let's run the pipeline!
+#         run_cleaning_pipeline(
+#             raw_csv_path=RAW_DATA_PATH,
+#             output_parquet_path=PROCESSED_DATA_PATH
+#         )

@@ -1,0 +1,21 @@
+Sub-Category,count
+"('Binders', 'Paper')",275
+"('Binders', 'Storage')",199
+"('Binders', 'Phones')",199
+"('Binders', 'Furnishings')",198
+"('Paper', 'Storage')",178
+"('Furnishings', 'Paper')",177
+"('Paper', 'Phones')",175
+"('Accessories', 'Binders')",161
+"('Accessories', 'Paper')",153
+"('Art', 'Paper')",150
+"('Art', 'Binders')",150
+"('Furnishings', 'Phones')",148
+"('Furnishings', 'Storage')",138
+"('Chairs', 'Paper')",133
+"('Appliances', 'Binders')",130
+"('Art', 'Phones')",124
+"('Binders', 'Chairs')",119
+"('Phones', 'Storage')",117
+"('Accessories', 'Phones')",116
+"('Accessories', 'Furnishings')",115
